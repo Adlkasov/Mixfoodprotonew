@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+<meta charset="UTF-8">
+<title>MIXFOOD</title>
+
+<style>
+
+body{
+font-family:Arial,sans-serif;
+background:#f2f4f7;
+margin:0;
+padding-bottom:80px;
+}
+
+header{
+background:white;
+padding:20px;
+text-align:center;
+font-size:26px;
+font-weight:bold;
+box-shadow:0 2px 8px rgba(0,0,0,0.08);
+}
+
+.container{
+max-width:520px;
+margin:auto;
+padding:15px;
+}
+
+.category{
+margin-top:25px;
+margin-bottom:10px;
+font-size:18px;
+font-weight:bold;
+}
+
+.menu-item{
+background:white;
+padding:15px;
+border-radius:12px;
+margin-bottom:10px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+box-shadow:0 2px 6px rgba(0,0,0,0.08);
+}
+
+.price{
+color:#666;
+font-size:14px;
+}
+
+.controls{
+display:flex;
+align-items:center;
+gap:10px;
+}
+
+button{
+border:none;
+cursor:pointer;
+transition:0.15s;
+}
+
+button:active{
+transform:scale(0.97);
+}
+
+.plus{
+background:#FECE0A;
+color:black;
+width:32px;
+height:32px;
+border-radius:8px;
+font-size:18px;
+}
+
+.minus{
+background:#ddd;
+width:32px;
+height:32px;
+border-radius:8px;
+font-size:18px;
+}
+
+.big-btn{
+width:100%;
+height:46px;
+border-radius:10px;
+background:#FECE0A;
+color:black;
+font-size:16px;
+margin-top:20px;
+}
+
+.cart-item{
+display:flex;
+flex-direction:column;
+margin-bottom:10px;
+}
+
+.nav{
+position:fixed;
+bottom:0;
+width:100%;
+display:flex;
+background:white;
+border-top:1px solid #ddd;
+}
+
+.nav button{
+flex:1;
+padding:16px;
+font-size:15px;
+background:none;
+}
+
+.modal{
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:rgba(0,0,0,0.4);
+display:none;
+justify-content:center;
+align-items:center;
+}
+
+.modal-content{
+background:white;
+padding:20px;
+border-radius:12px;
+width:90%;
+max-width:400px;
+}
+
+input, textarea{
+width:100%;
+padding:10px;
+margin-top:10px;
+border-radius:6px;
+border:1px solid #ccc;
+}
+
+.pay{
+margin-top:15px;
+background:#FECE0A;
+color:black;
+height:40px;
+width:100%;
+border-radius:8px;
+}
+
+.back{
+background:#ddd;
+margin-top:10px;
+height:35px;
+width:100%;
+border-radius:8px;
+}
+
+.payment-option{
+border:1px solid #ccc;
+padding:12px;
+border-radius:8px;
+margin-top:10px;
+cursor:pointer;
+}
+
+.payment-option.selected{
+border:2px solid #FECE0A;
+background:#fff9d6;
+}
+
+.pay-final{
+margin-top:20px;
+height:40px;
+width:100%;
+border-radius:8px;
+background:#aaa;
+color:white;
+}
+
+.pay-final.active{
+background:#FECE0A;
+color:black;
+}
+
+.desc{
+font-size:13px;
+color:#666;
+margin-top:5px;
+white-space:pre-line;
+display:none;
+}
+
+</style>
+</head>
+
+<body>
+
+<header>MIXFOOD</header>
+
+<div class="container">
+
+<div id="menuPage">
+
+<div id="menu"></div>
+
+<button class="big-btn" onclick="showCart()">
+Перейти в корзину
+</button>
+
+</div>
+
+<div id="cartPage" style="display:none">
+
+<h2>Корзина</h2>
+
+<div id="cartItems"></div>
+
+<h3>Итого: <span id="total">0</span> тг</h3>
+
+<button class="big-btn" onclick="openForm()">
+Оформить заказ
+</button>
+
+</div>
+
+</div>
+
+<div class="nav">
+<button onclick="showMenu()">Меню</button>
+<button onclick="showCart()">Корзина</button>
+</div>
+
+<div class="modal" id="orderModal">
+
+<div class="modal-content">
+
+<h3>Оформление заказа</h3>
+
+<input id="name" placeholder="Имя Фамилия *">
+<input id="phone" placeholder="Номер телефона *">
+<input id="address" placeholder="Ваш адрес *">
+<textarea id="comment" placeholder="Комментарий к заказу (необязательно)"></textarea>
+
+<button class="pay" onclick="goToPayment()">Оплатить заказ</button>
+<button class="back" onclick="closeForm()">← Назад</button>
+
+</div>
+
+</div>
+
+<div class="modal" id="paymentModal">
+
+<div class="modal-content">
+
+<h3>Выберите способ оплаты</h3>
+
+<div class="payment-option" onclick="selectPayment(this)">
+Kaspi.kz
+</div>
+
+<div class="payment-option" onclick="selectPayment(this)">
+Банковская карта
+</div>
+
+<button id="payBtn" class="pay-final" onclick="finishPayment()">
+Перейти к оплате
+</button>
+
+<button class="back" onclick="closePayment()">← Назад</button>
+
+</div>
+
+</div>
+
+<script>
+
+let selectedPayment=false
+
+const products=[
+
+{
+name:"Комбо №1",
+price:1800,
+qty:0,
+category:"Комбо",
+description:"Жареный Сазан x1\nКартофель фри 100гр x1\nБургер x1\nСпрайт 1л x1"
+},
+
+{
+name:"Комбо №2",
+price:1900,
+qty:0,
+category:"Комбо",
+description:"Жареный Карась x1\nПицца x1\nCoca-Cola 1л x1"
+},
+
+{name:"Бургер",price:350,qty:0,category:"Горячие блюда"},
+{name:"Пицца",price:700,qty:0,category:"Горячие блюда"},
+{name:"Суп с курицей",price:500,qty:0,category:"Горячие блюда"},
+{name:"Картофель фри 100гр",price:200,qty:0,category:"Горячие блюда"},
+
+{name:"Жареный Карась",price:900,qty:0,category:"Рыба"},
+{name:"Жареный Сазан",price:950,qty:0,category:"Рыба"},
+
+{name:"Спрайт 1л",price:450,qty:0,category:"Напитки"},
+{name:"Спрайт 0,5л",price:300,qty:0,category:"Напитки"},
+{name:"Fuse Tea 0,5л",price:320,qty:0,category:"Напитки"},
+{name:"Coca-Cola 1л",price:500,qty:0,category:"Напитки"}
+
+]
+
+function renderMenu(){
+
+const menu=document.getElementById("menu")
+menu.innerHTML=""
+
+const categories=[...new Set(products.map(p=>p.category))]
+
+categories.forEach(cat=>{
+
+menu.innerHTML+=`<div class="category">${cat}</div>`
+
+products.forEach((p,i)=>{
+
+if(p.category===cat){
+
+menu.innerHTML+=`
+
+<div class="menu-item">
+
+<div style="max-width:60%">
+
+<strong>${p.name}</strong>
+<div class="price">${p.price} тг</div>
+
+${p.description ? `
+<button onclick="toggleDesc(${i})" style="font-size:12px;background:none;color:#FECE0A">
+Показать состав
+</button>
+<div id="desc${i}" class="desc">${p.description}</div>
+` : ""}
+
+</div>
+
+<div class="controls">
+<button class="minus" onclick="changeQty(${i},-1)">-</button>
+<span>${p.qty}</span>
+<button class="plus" onclick="changeQty(${i},1)">+</button>
+</div>
+
+</div>
+`
+
+}
+
+})
+
+})
+
+renderCart()
+
+}
+
+function toggleDesc(i){
+
+let el=document.getElementById("desc"+i)
+
+el.style.display=el.style.display==="block"?"none":"block"
+
+}
+
+function changeQty(i,val){
+
+products[i].qty+=val
+
+if(products[i].qty<0)products[i].qty=0
+
+if(products[i].qty>6){
+products[i].qty=6
+alert("Максимум 6 штук одного товара")
+}
+
+renderMenu()
+
+}
+
+function renderCart(){
+
+const cart=document.getElementById("cartItems")
+cart.innerHTML=""
+
+let total=0
+
+products.forEach(p=>{
+
+if(p.qty>0){
+
+let sum=p.qty*p.price
+total+=sum
+
+let comboText=""
+
+if(p.description){
+
+comboText=`
+<div style="font-size:13px;color:#666;margin-left:10px;white-space:pre-line">
+${p.description}
+</div>
+`
+
+}
+
+cart.innerHTML+=`
+<div class="cart-item">
+
+<div style="display:flex;justify-content:space-between">
+<span>${p.name} x${p.qty}</span>
+<span>${sum} тг</span>
+</div>
+
+${comboText}
+
+</div>
+`
+
+}
+
+})
+
+document.getElementById("total").innerText=total
+
+}
+
+function showMenu(){
+menuPage.style.display="block"
+cartPage.style.display="none"
+}
+
+function showCart(){
+menuPage.style.display="none"
+cartPage.style.display="block"
+}
+
+function openForm(){
+
+let total=0
+products.forEach(p=>total+=p.qty*p.price)
+
+if(total===0){
+alert("Корзина пустая")
+return
+}
+
+if(total<1500){
+alert("Минимальная сумма заказа 1500 тг")
+return
+}
+
+orderModal.style.display="flex"
+
+}
+
+function closeForm(){
+orderModal.style.display="none"
+}
+
+function goToPayment(){
+
+let name=document.getElementById("name").value.trim()
+let phone=document.getElementById("phone").value.trim()
+let address=document.getElementById("address").value.trim()
+
+if(name===""||phone===""||address===""){
+alert("Пожалуйста заполните все обязательные поля")
+return
+}
+
+orderModal.style.display="none"
+paymentModal.style.display="flex"
+
+}
+
+function selectPayment(el){
+
+selectedPayment=true
+
+document.querySelectorAll(".payment-option").forEach(e=>{
+e.classList.remove("selected")
+})
+
+el.classList.add("selected")
+
+payBtn.classList.add("active")
+
+}
+
+function finishPayment(){
+
+if(!selectedPayment){
+alert("Выберите способ оплаты")
+return
+}
+
+alert("Заказ оплачен! Его статус можно увидеть в боте")
+
+products.forEach(p=>p.qty=0)
+
+document.getElementById("name").value=""
+document.getElementById("phone").value=""
+document.getElementById("address").value=""
+document.getElementById("comment").value=""
+
+paymentModal.style.display="none"
+
+renderMenu()
+showMenu()
+
+}
+
+function closePayment(){
+paymentModal.style.display="none"
+orderModal.style.display="flex"
+}
+
+renderMenu()
+
+</script>
+
+</body>
+</html>
