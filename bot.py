@@ -1,6 +1,7 @@
 import asyncio
 import json
 import random
+from datetime import datetime, timedelta, timezone
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
@@ -19,14 +20,14 @@ orders_db = {}
 
 # --- ФУНКЦИЯ: ГЕНЕРАЦИЯ ТЕКСТА ДЛЯ МЕНЕДЖЕРА ---
 def get_manager_text(order_id, data):
-    # Яркий заголовок со статусом
     status_emoji = {
         'Создан': '🆕', 'Счет выставлен': '🧾', 'Оплачен': '✅',
         'Готовится': '🍳', 'В пути': '🛵', 'Доставлен': '🎉'
     }
     emoji = status_emoji.get(data['status'], '📌')
     
-    text = f"{emoji} <b>ЗАКАЗ #{order_id} | Статус: {data['status'].upper()}</b>\n\n"
+    text = f"{emoji} <b>ЗАКАЗ #{order_id} | Статус: {data['status'].upper()}</b>\n"
+    text += f"🕒 <b>Время:</b> {data['created_at']}\n\n"
     
     text += f"👤 <b>Клиент:</b> {data['name']} | 📞 {data['phone']}\n"
     text += f"📍 <b>Адрес:</b> {data['address']}\n"
@@ -47,17 +48,14 @@ def get_manager_text(order_id, data):
 def get_manager_keyboard(order_id, status, method):
     buttons = []
     
-    # Если заказ доставлен, убираем все кнопки
     if status == 'Доставлен':
         return None
 
-    # Кнопки для Kaspi (показываем только если еще не оплачено)
     if method == 'kaspi' and status in ['Создан']:
         buttons.append([InlineKeyboardButton(text="🧾 Выставил счет", callback_data=f"status_{order_id}_billed")])
     elif method == 'kaspi' and status in ['Счет выставлен']:
         buttons.append([InlineKeyboardButton(text="✅ Оплата получена", callback_data=f"status_{order_id}_paid")])
     
-    # Стандартные статусы (показываем, если наличные или если Kaspi уже оплачен)
     if method == 'cash' or status not in ['Создан', 'Счет выставлен']:
         row = []
         if status != 'Готовится':
@@ -88,7 +86,10 @@ async def web_app_data_handler(message: types.Message):
     order_id = str(random.randint(1000, 9999))
     items_text = "\n".join([f"▫️ {i['name']} — {i['qty']} шт." for i in data.get('items', [])])
     
-    # Сохраняем ВСЕ данные в словарь, чтобы потом их можно было редактировать
+    # Получаем текущее время по Астане (UTC+5)
+    astana_tz = timezone(timedelta(hours=5))
+    current_time = datetime.now(astana_tz).strftime("%d.%m.%Y %H:%M")
+    
     orders_db[order_id] = {
         'user_id': message.from_user.id,
         'status': 'Создан',
@@ -100,11 +101,15 @@ async def web_app_data_handler(message: types.Message):
         'items_text': items_text,
         'total_price': data.get('totalPrice', 0),
         'kaspiPhone': data.get('payment', {}).get('kaspiPhone', ''),
-        'kaspiName': data.get('payment', {}).get('kaspiName', '')
+        'kaspiName': data.get('payment', {}).get('kaspiName', ''),
+        'created_at': current_time # Сохраняем время в базу
     }
     
-    # 1. ОТВЕТ КЛИЕНТУ (остается как было)
-    client_text = f"✅ <b>Заказ #{order_id} успешно создан!</b>\n\n🛒 <b>Состав:</b>\n{items_text}\n\n💰 <b>Итого:</b> {orders_db[order_id]['total_price']} тг\n\n"
+    # 1. ОТВЕТ КЛИЕНТУ
+    client_text = f"✅ <b>Заказ #{order_id} успешно создан!</b>\n"
+    client_text += f"🕒 <b>Время:</b> {current_time}\n\n"
+    client_text += f"🛒 <b>Состав:</b>\n{items_text}\n\n💰 <b>Итого:</b> {orders_db[order_id]['total_price']} тг\n\n"
+    
     if orders_db[order_id]['method'] == 'kaspi':
         client_text += "⏳ <i>Ожидайте, менеджер скоро выставит вам счет в приложении Kaspi. Мы пришлем уведомление!</i>"
     else:
@@ -129,7 +134,6 @@ async def status_handler(call: types.CallbackQuery):
         
     user_id = orders_db[order_id]['user_id']
     
-    # 1. Определяем новый статус и сообщение для клиента
     user_msg = ""
     new_status = ""
     
@@ -149,21 +153,16 @@ async def status_handler(call: types.CallbackQuery):
         new_status = "Доставлен"
         user_msg = f"🎉 <b>Заказ #{order_id} доставлен. Приятного аппетита!</b>"
 
-    # 2. Обновляем статус в базе
     orders_db[order_id]['status'] = new_status
 
-    # 3. ОБНОВЛЯЕМ СООБЩЕНИЕ У МЕНЕДЖЕРА
     mgr_text = get_manager_text(order_id, orders_db[order_id])
     kb = get_manager_keyboard(order_id, new_status, orders_db[order_id]['method'])
     
     try:
-        # Вот эта магия меняет текст текущего сообщения
         await call.message.edit_text(text=mgr_text, reply_markup=kb, parse_mode="HTML")
     except TelegramBadRequest:
-        # Ошибка возникает, если попытаться обновить сообщение на точно такое же (например, дважды кликнули)
         pass
 
-    # 4. Отправляем уведомление клиенту
     if user_msg:
         try:
             await bot.send_message(chat_id=user_id, text=user_msg, parse_mode="HTML")
@@ -171,7 +170,6 @@ async def status_handler(call: types.CallbackQuery):
             await call.answer("Статус изменен, но клиент заблокировал бота.", show_alert=True)
             return
 
-    # Завершаем обработку нажатия (чтобы часики на кнопке перестали крутиться)
     await call.answer(f"Статус изменен на: {new_status}")
 
 async def main():
